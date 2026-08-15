@@ -5,8 +5,24 @@ export type ExtractedPdf = {
 };
 
 export async function extractPdfText(file: File): Promise<ExtractedPdf> {
-  const pdfjs = await import("pdfjs-dist");
-  const workerUrl = (await import("pdfjs-dist/build/pdf.worker.mjs?url")).default;
+  if (!(file instanceof File)) throw new Error("Please choose a PDF document.");
+
+  const fileNameIsPdf = file.name.toLowerCase().endsWith(".pdf");
+  const mimeIsPdf = file.type === "application/pdf";
+  if (!fileNameIsPdf && !mimeIsPdf) {
+    throw new Error("That file isn't a PDF. Please upload a PDF document.");
+  }
+
+  const signature = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+  if (String.fromCharCode(...signature) !== "%PDF-") {
+    throw new Error("This file is not a valid PDF document.");
+  }
+
+  // The modern PDF.js build calls Promise.withResolvers(), which is unavailable
+  // in Safari before 17.4. The legacy build includes the required compatibility
+  // implementation and remains browser-only through this lazy import.
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const workerUrl = (await import("pdfjs-dist/legacy/build/pdf.worker.mjs?url")).default;
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
   const buffer = await file.arrayBuffer();
@@ -25,5 +41,12 @@ export async function extractPdfText(file: File): Promise<ExtractedPdf> {
     if (pageText) parts.push(`[Page ${i}]\n${pageText}`);
   }
 
-  return { text: parts.join("\n\n"), pages: doc.numPages };
+  const text = parts.join("\n\n").trim();
+  if (typeof text !== "string" || text.length === 0) {
+    throw new Error(
+      "We couldn't find readable text in this PDF. It may be scanned or image-only.",
+    );
+  }
+
+  return { text, pages: doc.numPages };
 }

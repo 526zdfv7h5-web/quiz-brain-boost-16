@@ -33,6 +33,8 @@ export const Route = createFileRoute("/")({
         content:
           "Upload a PDF, pick a difficulty and question count, and study with auto-generated multiple-choice quizzes.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Home,
@@ -49,7 +51,9 @@ const COUNTS = [5, 10, 20, 30];
 function Home() {
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
+  const extractionIdRef = useRef(0);
   const [file, setFile] = useState<File | null>(null);
+  const [pdfText, setPdfText] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [count, setCount] = useState(10);
@@ -58,31 +62,54 @@ function Home() {
   const generateFn = useServerFn(generateQuestions);
   const busy = status !== null;
 
-  function pick(f: File | undefined | null) {
+  async function pick(f: File | undefined | null) {
+    const extractionId = ++extractionIdRef.current;
     setError(null);
-    if (f && f.type === "application/pdf") setFile(f);
-    else if (f) setError("That file isn't a PDF. Please upload a PDF document.");
+    setFile(null);
+    setPdfText(null);
+    setStatus(null);
+    if (!f) return;
+
+    if (f.type !== "application/pdf" && !f.name.toLowerCase().endsWith(".pdf")) {
+      setError("That file isn't a PDF. Please upload a PDF document.");
+      return;
+    }
+
+    setFile(f);
+    setStatus("Reading your PDF…");
+    try {
+      const { extractPdfText } = await import("@/lib/pdf-text");
+      const extracted = await extractPdfText(f);
+      if (extractionId !== extractionIdRef.current) return;
+      if (typeof extracted.text !== "string" || extracted.text.trim().length === 0) {
+        throw new Error("We couldn't find readable text in this PDF.");
+      }
+      if (extracted.text.replace(/\s/g, "").length < MIN_PDF_CHARS) {
+        throw new Error(
+          "We couldn't extract enough readable text from this PDF. It may be scanned, image-only, or too short.",
+        );
+      }
+      setPdfText(extracted.text);
+      setStatus(null);
+    } catch (extractionError) {
+      if (extractionId !== extractionIdRef.current) return;
+      setPdfText(null);
+      setStatus(null);
+      setError(
+        extractionError instanceof Error && extractionError.message
+          ? extractionError.message
+          : "We couldn't read this PDF. Please try a text-based PDF.",
+      );
+    }
   }
 
   async function generate() {
-    if (!file || busy) return;
+    if (!file || !pdfText || busy) return;
     setError(null);
     try {
-      setStatus("Reading your PDF…");
-      const { extractPdfText } = await import("@/lib/pdf-text");
-      const { text } = await extractPdfText(file);
-
-      if (text.replace(/\s/g, "").length < MIN_PDF_CHARS) {
-        setStatus(null);
-        setError(
-          "We couldn't extract enough readable text from this PDF. It may be a scanned image or empty. Try a text-based PDF.",
-        );
-        return;
-      }
-
       setStatus("Generating questions from your PDF…");
       const { questions } = await generateFn({
-        data: { pdfText: text, difficulty, count },
+        data: { pdfText, difficulty, count },
       });
 
       saveQuiz(buildQuizState({ fileName: file.name, difficulty, count }, questions));
@@ -128,7 +155,7 @@ function Home() {
           type="file"
           accept="application/pdf"
           className="hidden"
-          onChange={(e) => pick(e.target.files?.[0])}
+          onChange={(e) => void pick(e.target.files?.[0])}
         />
         {!file ? (
           <button
@@ -142,7 +169,7 @@ function Home() {
             onDrop={(e) => {
               e.preventDefault();
               setDragging(false);
-              pick(e.dataTransfer.files?.[0]);
+              void pick(e.dataTransfer.files?.[0]);
             }}
             className={`flex w-full flex-col items-center gap-3 rounded-3xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
               dragging
@@ -169,13 +196,20 @@ function Home() {
                 {file.size > 1024 * 1024
                   ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
                   : `${Math.max(1, Math.round(file.size / 1024))} KB`}{" "}
-                · ready
+                · {status === "Reading your PDF…" ? "extracting text…" : pdfText ? "ready" : "unreadable"}
               </p>
             </div>
             <button
               type="button"
               aria-label="Remove file"
-              onClick={() => setFile(null)}
+              onClick={() => {
+                extractionIdRef.current += 1;
+                setFile(null);
+                setPdfText(null);
+                setStatus(null);
+                setError(null);
+                if (inputRef.current) inputRef.current.value = "";
+              }}
               className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted"
             >
               <X className="h-4 w-4" />
@@ -242,7 +276,7 @@ function Home() {
 
       <button
         type="button"
-        disabled={!file || busy}
+        disabled={!file || !pdfText || busy}
         onClick={generate}
         className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-semibold text-primary-foreground shadow-soft transition-opacity disabled:opacity-60"
       >
