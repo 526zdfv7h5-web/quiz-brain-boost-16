@@ -32,12 +32,23 @@ export async function extractPdfText(file: File): Promise<ExtractedPdf> {
   const maxPages = Math.min(doc.numPages, 60);
   for (let i = 1; i <= maxPages; i++) {
     const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item) => ("str" in item ? item.str : ""))
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
+    // PDF.js getTextContent() uses `for await` on a ReadableStream. Older
+    // mobile Safari exposes ReadableStream but not its async iterator, causing
+    // "undefined is not a function". Consume the standard reader directly.
+    const reader = page.streamTextContent().getReader();
+    const pageParts: string[] = [];
+    try {
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        for (const item of chunk.value.items) {
+          if ("str" in item && typeof item.str === "string") pageParts.push(item.str);
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    const pageText = pageParts.join(" ").replace(/\s+/g, " ").trim();
     if (pageText) parts.push(`[Page ${i}]\n${pageText}`);
   }
 
