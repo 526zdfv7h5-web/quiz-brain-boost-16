@@ -54,7 +54,7 @@ function QuizPage() {
     );
   }
 
-  const q = quiz.questions[index];
+  const q = quiz.questions[index]!;
   const selected = quiz.answers[index];
   const isLast = index === quiz.questions.length - 1;
 
