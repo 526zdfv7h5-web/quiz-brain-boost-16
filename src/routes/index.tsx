@@ -230,18 +230,29 @@ function Home() {
         </div>
       </section>
 
+      {error && (
+        <div className="mt-6 flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <p className="min-w-0 text-sm leading-relaxed text-destructive">{error}</p>
+        </div>
+      )}
+
       <button
         type="button"
-        disabled={!file}
+        disabled={!file || busy}
         onClick={generate}
-        className="mt-8 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-semibold text-primary-foreground shadow-soft transition-opacity disabled:opacity-40"
+        className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-semibold text-primary-foreground shadow-soft transition-opacity disabled:opacity-60"
       >
-        <Sparkles className="h-4 w-4" />
-        Generate Quiz
+        {busy ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Sparkles className="h-4 w-4" />
+        )}
+        {busy ? status : "Generate Quiz"}
       </button>
-      {!file && (
+      {!file && !busy && (
         <p className="mt-3 text-center text-xs text-muted-foreground">
-          Add a PDF to get started
+          Questions are built only from the PDF you upload
         </p>
       )}
     </main>
