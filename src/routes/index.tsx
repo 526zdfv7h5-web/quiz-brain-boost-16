@@ -1,11 +1,22 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
-import { FileText, GraduationCap, Sparkles, Upload, X } from "lucide-react";
 import {
-  buildPlaceholderQuiz,
+  AlertCircle,
+  FileText,
+  GraduationCap,
+  Loader2,
+  Sparkles,
+  Upload,
+  X,
+} from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import {
+  buildQuizState,
+  MIN_PDF_CHARS,
   saveQuiz,
   type Difficulty,
 } from "@/lib/quiz";
+import { generateQuestions } from "@/lib/quiz.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -42,17 +53,49 @@ function Home() {
   const [dragging, setDragging] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [count, setCount] = useState(10);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const generateFn = useServerFn(generateQuestions);
+  const busy = status !== null;
 
   function pick(f: File | undefined | null) {
+    setError(null);
     if (f && f.type === "application/pdf") setFile(f);
+    else if (f) setError("That file isn't a PDF. Please upload a PDF document.");
   }
 
-  function generate() {
-    if (!file) return;
-    saveQuiz(
-      buildPlaceholderQuiz({ fileName: file.name, difficulty, count }),
-    );
-    navigate({ to: "/quiz" });
+  async function generate() {
+    if (!file || busy) return;
+    setError(null);
+    try {
+      setStatus("Reading your PDF…");
+      const { extractPdfText } = await import("@/lib/pdf-text");
+      const { text } = await extractPdfText(file);
+
+      if (text.replace(/\s/g, "").length < MIN_PDF_CHARS) {
+        setStatus(null);
+        setError(
+          "We couldn't extract enough readable text from this PDF. It may be a scanned image or empty. Try a text-based PDF.",
+        );
+        return;
+      }
+
+      setStatus("Generating questions from your PDF…");
+      const { questions } = await generateFn({
+        data: { pdfText: text, difficulty, count },
+      });
+
+      saveQuiz(buildQuizState({ fileName: file.name, difficulty, count }, questions));
+      setStatus(null);
+      navigate({ to: "/quiz" });
+    } catch (e) {
+      setStatus(null);
+      setError(
+        e instanceof Error && e.message
+          ? e.message
+          : "Something went wrong while reading your PDF. Please try again.",
+      );
+    }
   }
 
   return (
@@ -123,7 +166,10 @@ function Home() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{file.name}</p>
               <p className="text-xs text-muted-foreground">
-                {(file.size / 1024 / 1024).toFixed(2)} MB · ready
+                {file.size > 1024 * 1024
+                  ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
+                  : `${Math.max(1, Math.round(file.size / 1024))} KB`}{" "}
+                · ready
               </p>
             </div>
             <button
@@ -187,18 +233,29 @@ function Home() {
         </div>
       </section>
 
+      {error && (
+        <div className="mt-6 flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <p className="min-w-0 text-sm leading-relaxed text-destructive">{error}</p>
+        </div>
+      )}
+
       <button
         type="button"
-        disabled={!file}
+        disabled={!file || busy}
         onClick={generate}
-        className="mt-8 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-semibold text-primary-foreground shadow-soft transition-opacity disabled:opacity-40"
+        className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-semibold text-primary-foreground shadow-soft transition-opacity disabled:opacity-60"
       >
-        <Sparkles className="h-4 w-4" />
-        Generate Quiz
+        {busy ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Sparkles className="h-4 w-4" />
+        )}
+        {busy ? status : "Generate Quiz"}
       </button>
-      {!file && (
+      {!file && !busy && (
         <p className="mt-3 text-center text-xs text-muted-foreground">
-          Add a PDF to get started
+          Questions are built only from the PDF you upload
         </p>
       )}
     </main>

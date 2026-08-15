@@ -5,6 +5,8 @@ export type Question = {
   prompt: string;
   options: string[];
   correctIndex: number;
+  /** Hidden reference to the PDF section/page supporting this question. */
+  sourceRef: string;
 };
 
 export type QuizConfig = {
@@ -21,33 +23,20 @@ export type QuizState = {
 
 const KEY = "brain-train-quiz";
 
-const SAMPLE_TOPICS = [
-  "the central idea introduced in the opening section",
-  "the primary function described in the diagram",
-  "the term used for the process of energy transfer",
-  "the main conclusion of the case study",
-  "the relationship between the two variables discussed",
-  "the exception noted by the author",
-  "the correct order of the described steps",
-  "the definition given for the key concept",
-];
+export const MIN_PDF_CHARS = 400;
 
-export function buildPlaceholderQuiz(config: QuizConfig): QuizState {
-  const questions: Question[] = Array.from({ length: config.count }, (_, i) => ({
+export function buildQuizState(
+  config: QuizConfig,
+  raw: { prompt: string; options: string[]; correctIndex: number; sourceRef?: string }[],
+): QuizState {
+  const questions: Question[] = raw.map((q, i) => ({
     id: i + 1,
-    prompt: `Based on your notes, which statement best describes ${
-      SAMPLE_TOPICS[i % SAMPLE_TOPICS.length]
-    }?`,
-    options: [
-      "It defines the core principle covered in the material.",
-      "It applies only to unrelated edge cases.",
-      "It contradicts the summary given in the notes.",
-      "It was mentioned only as historical background.",
-    ],
-    correctIndex: i % 4 === 0 ? 0 : 0,
+    prompt: q.prompt,
+    options: q.options,
+    correctIndex: q.correctIndex,
+    sourceRef: q.sourceRef ?? "",
   }));
-
-  return { config, questions, answers: Array(config.count).fill(null) };
+  return { config, questions, answers: Array(questions.length).fill(null) };
 }
 
 export function saveQuiz(state: QuizState) {
