@@ -53,17 +53,49 @@ function Home() {
   const [dragging, setDragging] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [count, setCount] = useState(10);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const generateFn = useServerFn(generateQuestions);
+  const busy = status !== null;
 
   function pick(f: File | undefined | null) {
+    setError(null);
     if (f && f.type === "application/pdf") setFile(f);
+    else if (f) setError("That file isn't a PDF. Please upload a PDF document.");
   }
 
-  function generate() {
-    if (!file) return;
-    saveQuiz(
-      buildPlaceholderQuiz({ fileName: file.name, difficulty, count }),
-    );
-    navigate({ to: "/quiz" });
+  async function generate() {
+    if (!file || busy) return;
+    setError(null);
+    try {
+      setStatus("Reading your PDF…");
+      const { extractPdfText } = await import("@/lib/pdf-text");
+      const { text } = await extractPdfText(file);
+
+      if (text.replace(/\s/g, "").length < MIN_PDF_CHARS) {
+        setStatus(null);
+        setError(
+          "We couldn't extract enough readable text from this PDF. It may be a scanned image or empty. Try a text-based PDF.",
+        );
+        return;
+      }
+
+      setStatus("Generating questions from your PDF…");
+      const { questions } = await generateFn({
+        data: { pdfText: text, difficulty, count },
+      });
+
+      saveQuiz(buildQuizState({ fileName: file.name, difficulty, count }, questions));
+      setStatus(null);
+      navigate({ to: "/quiz" });
+    } catch (e) {
+      setStatus(null);
+      setError(
+        e instanceof Error && e.message
+          ? e.message
+          : "Something went wrong while reading your PDF. Please try again.",
+      );
+    }
   }
 
   return (
