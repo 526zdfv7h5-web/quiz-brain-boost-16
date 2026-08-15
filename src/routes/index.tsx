@@ -1,11 +1,22 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
-import { FileText, GraduationCap, Sparkles, Upload, X } from "lucide-react";
 import {
-  buildPlaceholderQuiz,
+  AlertCircle,
+  FileText,
+  GraduationCap,
+  Loader2,
+  Sparkles,
+  Upload,
+  X,
+} from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import {
+  buildQuizState,
+  MIN_PDF_CHARS,
   saveQuiz,
   type Difficulty,
 } from "@/lib/quiz";
+import { generateQuestions } from "@/lib/quiz.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
