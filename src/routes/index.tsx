@@ -166,7 +166,10 @@ function Home() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{file.name}</p>
               <p className="text-xs text-muted-foreground">
-                {(file.size / 1024 / 1024).toFixed(2)} MB · ready
+                {file.size > 1024 * 1024
+                  ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
+                  : `${Math.max(1, Math.round(file.size / 1024))} KB`}{" "}
+                · ready
               </p>
             </div>
             <button
