@@ -20,6 +20,7 @@ For the first version, create:
 
 4. A question-count selector:
 
+   - 1
    - 5
 
    - 10
@@ -27,6 +28,9 @@ For the first version, create:
    - 20
 
    - 30
+   - 50
+   - 60
+   - 100
 
 5. A "Generate Quiz" button.
 
