@@ -109,8 +109,7 @@ export const generateQuestions = createServerFn({ method: "POST" })
 
     const parsed = await callAi(
       system,
-      `Generate up to ${data.count} multiple-choice questions in JSON.\nDifficulty: ${data.difficulty}. ${DIFFICULTY_HINT[data.difficulty]}\n\nDOCUMENT START\n${data.pdfText.slice(0, 120000)}\nDOCUMENT END`,
-    );
+      ``Generate exactly ${data.count} multiple-choice questions in JSON.\nDifficulty: ${data.difficulty}. ${DIFFICULTY_HINT[data.difficulty]}\n\nDOCUMENT START\n${data.pdfText.slice(0, 120000)}\nDOCUMENT 
 
     const result = z.object({ questions: z.array(McqSchema) }).safeParse(parsed);
     if (!result.success) throw new Error("The AI response could not be read. Please try again.");
