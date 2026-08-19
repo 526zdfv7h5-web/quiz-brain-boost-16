@@ -464,9 +464,10 @@ STUDENT ANSWER: ${it.answer || "(no answer given)"}`,
       )
       .join("\n\n");
 
-    const parsed = await callAi(
-      system,
-      `
+    try {
+      const parsed = await callAi(
+        system,
+        `
 Grade these ${data.items.length} student answers.
 
 ${items}
@@ -475,27 +476,25 @@ DOCUMENT START
 ${data.pdfText.slice(0, 100000)}
 DOCUMENT END
 `,
-    );
+      );
 
-    const result = z
-      .object({
-        grades: z.array(GradeSchema),
-      })
-      .safeParse(parsed);
+      const result = z
+        .object({
+          grades: z.array(GradeSchema),
+        })
+        .safeParse(parsed);
 
-    if (!result.success) {
-      throw new Error("Grading failed. Please try again.");
+      if (!result.success) {
+        throw new Error("Grading failed.");
+      }
+
+      const grades = data.items.map(
+        (item, i) => result.data.grades[i] ?? gradeOffline(item),
+      );
+
+      return { grades };
+    } catch {
+      // AI unavailable — grade offline against the model answer / key points.
+      return { grades: data.items.map((item) => gradeOffline(item)) };
     }
-
-    const grades = data.items.map(
-      (_, i) =>
-        result.data.grades[i] ?? {
-          score: 0,
-          correctPoints: [],
-          missingPoints: [],
-          feedback: "This answer could not be graded.",
-        },
-    );
-
-    return { grades };
   });
