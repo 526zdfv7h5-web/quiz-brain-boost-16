@@ -204,6 +204,7 @@ export const generateQuestions = createServerFn({ method: "POST" })
 
     const maxAttempts = 4;
 
+    try {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const remaining = data.count - allQuestions.length;
 
