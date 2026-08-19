@@ -1,5 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import {
+  buildOfflineMcqs,
+  buildOfflineTheory,
+  gradeOffline,
+} from "@/lib/offline-quiz";
 
 const BaseInput = z.object({
   pdfText: z.string().min(1),
