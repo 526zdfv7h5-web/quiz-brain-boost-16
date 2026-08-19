@@ -1,5 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import {
+  buildOfflineMcqs,
+  buildOfflineTheory,
+  gradeOffline,
+} from "@/lib/offline-quiz";
 
 const BaseInput = z.object({
   pdfText: z.string().min(1),
@@ -199,6 +204,7 @@ export const generateQuestions = createServerFn({ method: "POST" })
 
     const maxAttempts = 4;
 
+    try {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const remaining = data.count - allQuestions.length;
 
@@ -262,17 +268,36 @@ DOCUMENT END
           allQuestions.push(question);
         }
       }
+      }
+    } catch {
+      // AI unavailable (no credits, rate limit, not configured):
+      // fall back to the offline PDF-only generator below.
+    }
+
+    if (allQuestions.length < data.count) {
+      const offline = buildOfflineMcqs(
+        data.pdfText,
+        data.count - allQuestions.length,
+      );
+
+      for (const question of offline) {
+        if (allQuestions.length >= data.count) break;
+
+        const duplicate = allQuestions.some(
+          (existing) =>
+            normalizeQuestion(existing.prompt) ===
+            normalizeQuestion(question.prompt),
+        );
+
+        if (!duplicate) {
+          allQuestions.push(question);
+        }
+      }
     }
 
     if (allQuestions.length === 0) {
       throw new Error(
         "This PDF does not contain enough readable content to build questions from.",
-      );
-    }
-
-    if (allQuestions.length < data.count) {
-      throw new Error(
-        `The PDF could only support ${allQuestions.length} unique questions out of the requested ${data.count}. No unsupported questions were invented.`,
       );
     }
 
@@ -307,6 +332,7 @@ export const generateTheoryQuestions = createServerFn({
 
     const maxAttempts = 4;
 
+    try {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const remaining = data.count - allQuestions.length;
 
@@ -371,16 +397,34 @@ DOCUMENT END
         }
       }
     }
+    } catch {
+      // AI unavailable — fall back to the offline PDF-only generator.
+    }
+
+    if (allQuestions.length < data.count) {
+      const offline = buildOfflineTheory(
+        data.pdfText,
+        data.count - allQuestions.length,
+      );
+
+      for (const question of offline) {
+        if (allQuestions.length >= data.count) break;
+
+        const duplicate = allQuestions.some(
+          (existing) =>
+            normalizeQuestion(existing.prompt) ===
+            normalizeQuestion(question.prompt),
+        );
+
+        if (!duplicate) {
+          allQuestions.push(question);
+        }
+      }
+    }
 
     if (allQuestions.length === 0) {
       throw new Error(
         "This PDF does not contain enough readable content to build questions from.",
-      );
-    }
-
-    if (allQuestions.length < data.count) {
-      throw new Error(
-        `The PDF could only support ${allQuestions.length} unique theory questions out of the requested ${data.count}. No unsupported questions were invented.`,
       );
     }
 
@@ -420,9 +464,10 @@ STUDENT ANSWER: ${it.answer || "(no answer given)"}`,
       )
       .join("\n\n");
 
-    const parsed = await callAi(
-      system,
-      `
+    try {
+      const parsed = await callAi(
+        system,
+        `
 Grade these ${data.items.length} student answers.
 
 ${items}
@@ -431,27 +476,25 @@ DOCUMENT START
 ${data.pdfText.slice(0, 100000)}
 DOCUMENT END
 `,
-    );
+      );
 
-    const result = z
-      .object({
-        grades: z.array(GradeSchema),
-      })
-      .safeParse(parsed);
+      const result = z
+        .object({
+          grades: z.array(GradeSchema),
+        })
+        .safeParse(parsed);
 
-    if (!result.success) {
-      throw new Error("Grading failed. Please try again.");
+      if (!result.success) {
+        throw new Error("Grading failed.");
+      }
+
+      const grades = data.items.map(
+        (item, i) => result.data.grades[i] ?? gradeOffline(item),
+      );
+
+      return { grades };
+    } catch {
+      // AI unavailable — grade offline against the model answer / key points.
+      return { grades: data.items.map((item) => gradeOffline(item)) };
     }
-
-    const grades = data.items.map(
-      (_, i) =>
-        result.data.grades[i] ?? {
-          score: 0,
-          correctPoints: [],
-          missingPoints: [],
-          feedback: "This answer could not be graded.",
-        },
-    );
-
-    return { grades };
   });
