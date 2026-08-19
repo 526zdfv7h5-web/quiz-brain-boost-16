@@ -64,6 +64,7 @@ const DIFFICULTY_HINT = {
 } as const;
 
 async function callAi(system: string, user: string) {
+  throw new Error("SIMULATED: AI credits exhausted.");
   const apiKey = process.env["LOVABLE_API_KEY"];
 
   if (!apiKey) {
