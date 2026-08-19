@@ -396,16 +396,34 @@ DOCUMENT END
         }
       }
     }
+    } catch {
+      // AI unavailable — fall back to the offline PDF-only generator.
+    }
+
+    if (allQuestions.length < data.count) {
+      const offline = buildOfflineTheory(
+        data.pdfText,
+        data.count - allQuestions.length,
+      );
+
+      for (const question of offline) {
+        if (allQuestions.length >= data.count) break;
+
+        const duplicate = allQuestions.some(
+          (existing) =>
+            normalizeQuestion(existing.prompt) ===
+            normalizeQuestion(question.prompt),
+        );
+
+        if (!duplicate) {
+          allQuestions.push(question);
+        }
+      }
+    }
 
     if (allQuestions.length === 0) {
       throw new Error(
         "This PDF does not contain enough readable content to build questions from.",
-      );
-    }
-
-    if (allQuestions.length < data.count) {
-      throw new Error(
-        `The PDF could only support ${allQuestions.length} unique theory questions out of the requested ${data.count}. No unsupported questions were invented.`,
       );
     }
 
