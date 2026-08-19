@@ -268,7 +268,6 @@ DOCUMENT END
         }
       }
       }
-      }
     } catch {
       // AI unavailable (no credits, rate limit, not configured):
       // fall back to the offline PDF-only generator below.
